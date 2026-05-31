@@ -1,0 +1,316 @@
+{% extends 'shop/base.html' %}
+{% block title %}{{ product.name }} — TechStore{% endblock %}
+
+{% block extra_css %}
+<style>
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+    transition: color 0.15s;
+  }
+  .back-link:hover { color: var(--primary); }
+
+  /* Product detail */
+  .product-detail {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 32px;
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .product-img-wrap {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9rem;
+    min-height: 340px;
+    position: relative;
+  }
+  .product-img-wrap .condition-tag {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 5px 12px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  .product-info { padding: 32px 32px 32px 0; }
+  .product-brand { color: var(--primary); font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .product-info h1 { font-size: 1.8rem; font-weight: 800; line-height: 1.2; margin-bottom: 16px; }
+
+  .price-block { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+  .price-main { font-size: 2.2rem; font-weight: 900; color: var(--text); }
+  .price-old-d { font-size: 1.1rem; color: var(--text-muted); text-decoration: line-through; }
+  .discount-tag { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .meta-item .label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .meta-item .val { font-size: 1rem; font-weight: 700; color: var(--text); }
+
+  .stock-status { margin-bottom: 20px; font-weight: 600; font-size: 0.95rem; }
+  .stock-ok   { color: var(--success); }
+  .stock-warn { color: var(--warning); }
+  .stock-no   { color: var(--danger); }
+
+  .desc-text { color: #4a5568; line-height: 1.7; font-size: 0.95rem; }
+
+  /* Sections */
+  .section { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; margin-bottom: 28px; }
+  .section-title { font-size: 1.2rem; font-weight: 800; color: var(--text); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+
+  /* Suppliers */
+  .suppliers-grid { display: grid; gap: 10px; }
+  .supplier-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg);
+    border-radius: 10px;
+    border-left: 4px solid var(--primary);
+  }
+  .supplier-name { font-weight: 700; }
+  .supplier-country { color: var(--text-muted); font-size: 0.85rem; }
+  .supplier-rating { color: #f6ad55; font-weight: 700; font-size: 0.9rem; }
+
+  /* Reviews */
+  .reviews-list { display: grid; gap: 16px; }
+  .review-card { background: var(--bg); border-radius: 10px; padding: 16px 20px; }
+  .review-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .review-author { font-weight: 700; font-size: 0.95rem; }
+  .review-date { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+  .stars { color: #f6ad55; font-size: 1rem; letter-spacing: 1px; }
+  .review-comment { color: #4a5568; line-height: 1.6; font-size: 0.95rem; margin-bottom: 8px; }
+  .review-pros  { color: #276749; font-size: 0.85rem; }
+  .review-cons  { color: #9b2c2c; font-size: 0.85rem; margin-top: 4px; }
+  .verified-badge { display: inline-flex; align-items: center; gap: 4px; background: #c6f6d5; color: #276749; padding: 2px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: 600; margin-top: 6px; }
+
+  /* Review form */
+  .review-form { background: var(--bg); border-radius: 10px; padding: 24px; margin-top: 24px; }
+  .review-form h3 { margin-bottom: 18px; font-size: 1.1rem; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.88rem; color: var(--text); }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 10px 13px;
+    border: 2px solid var(--border); border-radius: 8px;
+    font-size: 0.95rem; outline: none; background: white;
+    transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-submit { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 11px 28px; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 700; cursor: pointer; transition: opacity 0.15s; }
+  .form-submit:hover { opacity: 0.9; }
+
+  /* Similar */
+  .similar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .similar-card { padding: 14px; background: var(--bg); border-radius: 10px; text-align: center; transition: background 0.15s; }
+  .similar-card:hover { background: #e8eaf6; }
+  .similar-card .s-name { font-weight: 700; font-size: 0.9rem; margin: 8px 0 4px; color: var(--text); }
+  .similar-card .s-price { color: var(--primary); font-weight: 800; }
+
+  @media (max-width: 768px) {
+    .product-detail { grid-template-columns: 1fr; }
+    .product-info { padding: 20px; }
+    .similar-grid { grid-template-columns: repeat(2, 1fr); }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'product_list' %}" class="back-link">← Назад к каталогу</a>
+
+<div class="product-detail">
+  <div class="product-img-wrap">
+    {% if product.category.name == 'Смартфоны' %}📱
+    {% elif product.category.name == 'Ноутбуки' %}💻
+    {% elif product.category.name == 'Наушники' %}🎧
+    {% elif product.category.name == 'Телевизоры' %}📺
+    {% elif product.category.name == 'Планшеты' %}📟
+    {% else %}🖥️{% endif %}
+    <span class="condition-tag">{{ product.get_condition_display }}</span>
+  </div>
+
+  <div class="product-info">
+    <div class="product-brand">{{ product.brand }}</div>
+    <h1>{{ product.name }}</h1>
+
+    <div class="price-block">
+      {% if product.discount_price %}
+        <span class="price-main">{{ product.discount_price }} ₽</span>
+        <span class="price-old-d">{{ product.price }} ₽</span>
+        <span class="discount-tag">🔥 Скидка</span>
+      {% else %}
+        <span class="price-main">{{ product.price }} ₽</span>
+      {% endif %}
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta-item">
+        <div class="label">Категория</div>
+        <div class="val">{{ product.category.name }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Бренд / Модель</div>
+        <div class="val">{{ product.brand }} {{ product.model }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Год выпуска</div>
+        <div class="val">{{ product.release_year }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="label">Гарантия</div>
+        <div class="val">{{ product.warranty_months }} мес.</div>
+      </div>
+    </div>
+
+    <div class="stock-status">
+      {% if product.stock_quantity == 0 %}
+        <span class="stock-no">✕ Нет в наличии</span>
+      {% elif product.stock_quantity < 5 %}
+        <span class="stock-warn">⚡ Осталось {{ product.stock_quantity }} шт. — заканчивается</span>
+      {% else %}
+        <span class="stock-ok">✓ В наличии — {{ product.stock_quantity }} шт.</span>
+      {% endif %}
+    </div>
+
+    {% if product.description %}
+      <p class="desc-text">{{ product.description }}</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if suppliers %}
+<div class="section">
+  <h2 class="section-title">🏭 Поставщики</h2>
+  <div class="suppliers-grid">
+    {% for supplier in suppliers %}
+    <div class="supplier-row">
+      <div>
+        <div class="supplier-name">{{ supplier.name }}</div>
+        <div class="supplier-country">{{ supplier.country }}</div>
+      </div>
+      <div class="supplier-rating">⭐ {{ supplier.rating }}/5.0</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="section">
+  <h2 class="section-title">💬 Отзывы
+    <span style="font-size:0.85rem;font-weight:500;color:var(--text-muted)">({{ reviews.count }})</span>
+  </h2>
+
+  {% if reviews %}
+  <div class="reviews-list">
+    {% for review in reviews %}
+    <div class="review-card">
+      <div class="review-top">
+        <div>
+          <div class="review-author">{{ review.customer_name }}</div>
+          <div class="review-date">{{ review.created_at|date:"d.m.Y" }}</div>
+        </div>
+        <div class="stars">
+          {% for i in "12345" %}{% if forloop.counter <= review.rating %}⭐{% else %}☆{% endif %}{% endfor %}
+        </div>
+      </div>
+      <div class="review-comment">{{ review.comment }}</div>
+      {% if review.advantages %}
+        <div class="review-pros">✅ {{ review.advantages }}</div>
+      {% endif %}
+      {% if review.disadvantages %}
+        <div class="review-cons">❌ {{ review.disadvantages }}</div>
+      {% endif %}
+      {% if review.is_verified_purchase %}
+        <span class="verified-badge">✓ Подтверждённая покупка</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <p style="color:var(--text-muted)">Отзывов пока нет. Будьте первым!</p>
+  {% endif %}
+
+  <div class="review-form">
+    <h3>✍️ Оставить отзыв</h3>
+    <form method="POST" action="{% url 'add_review' product.id %}">
+      {% csrf_token %}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Ваше имя</label>
+          <input type="text" name="customer_name" required />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="customer_email" required />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Оценка</label>
+        <select name="rating" required>
+          <option value="5">⭐⭐⭐⭐⭐ Отлично</option>
+          <option value="4">⭐⭐⭐⭐ Хорошо</option>
+          <option value="3">⭐⭐⭐ Нормально</option>
+          <option value="2">⭐⭐ Плохо</option>
+          <option value="1">⭐ Ужасно</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Комментарий</label>
+        <textarea name="comment" rows="3" required></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Достоинства (необязательно)</label>
+          <textarea name="advantages" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Недостатки (необязательно)</label>
+          <textarea name="disadvantages" rows="2"></textarea>
+        </div>
+      </div>
+      <button type="submit" class="form-submit">Отправить отзыв</button>
+    </form>
+  </div>
+</div>
+
+{% if similar_products %}
+<div class="section">
+  <h2 class="section-title">🔗 Похожие товары</h2>
+  <div class="similar-grid">
+    {% for p in similar_products %}
+    <a href="{% url 'product_detail' p.id %}" class="similar-card">
+      <div style="font-size:2.2rem">
+        {% if p.category.name == 'Смартфоны' %}📱{% elif p.category.name == 'Ноутбуки' %}💻{% else %}🖥️{% endif %}
+      </div>
+      <div class="s-name">{{ p.name }}</div>
+      <div class="s-price">
+        {% if p.discount_price %}{{ p.discount_price }}{% else %}{{ p.price }}{% endif %} ₽
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

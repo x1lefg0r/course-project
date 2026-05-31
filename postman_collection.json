@@ -1,0 +1,541 @@
+{
+  "info": {
+    "name": "Electronics Store API",
+    "description": "Коллекция запросов для тестирования API интернет-магазина электроники.\n\nАутентификация: Token-based.\n1. Зарегистрируйтесь через POST /api/auth/register/ — получите token.\n2. Установите переменную {{token}} и добавьте заголовок: Authorization: Token {{token}}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Регистрация покупателя",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"buyer1\",\n  \"email\": \"buyer@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"buyer\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/register/", "host": ["{{base_url}}"], "path": ["api", "auth", "register", ""] }
+          }
+        },
+        {
+          "name": "Регистрация менеджера",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"manager1\",\n  \"email\": \"manager@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"manager\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/register/", "host": ["{{base_url}}"], "path": ["api", "auth", "register", ""] }
+          }
+        },
+        {
+          "name": "Получить токен",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.token) { pm.collectionVariables.set('token', json.token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"buyer1\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/token/", "host": ["{{base_url}}"], "path": ["api", "auth", "token", ""] }
+          }
+        },
+        {
+          "name": "Мой профиль (GET)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/auth/profile/", "host": ["{{base_url}}"], "path": ["api", "auth", "profile", ""] }
+          }
+        },
+        {
+          "name": "Обновить профиль (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+7-900-123-45-67\",\n  \"address\": \"Москва, ул. Пушкина, д. 1\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/auth/profile/", "host": ["{{base_url}}"], "path": ["api", "auth", "profile", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Список категорий",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/categories/", "host": ["{{base_url}}"], "path": ["api", "categories", ""] }
+          }
+        },
+        {
+          "name": "Список — только активные",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/categories/?is_active=true",
+              "host": ["{{base_url}}"], "path": ["api", "categories", ""],
+              "query": [{ "key": "is_active", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Категория по ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/categories/1/", "host": ["{{base_url}}"], "path": ["api", "categories", "1", ""] }
+          }
+        },
+        {
+          "name": "Создать категорию (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Смартфоны\",\n  \"description\": \"Мобильные телефоны и смартфоны\",\n  \"is_active\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/categories/", "host": ["{{base_url}}"], "path": ["api", "categories", ""] }
+          }
+        },
+        {
+          "name": "Популярные категории",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/categories/popular/", "host": ["{{base_url}}"], "path": ["api", "categories", "popular", ""] }
+          }
+        },
+        {
+          "name": "Переключить активность категории",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/categories/1/toggle_active/", "host": ["{{base_url}}"], "path": ["api", "categories", "1", "toggle_active", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "Список товаров",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/", "host": ["{{base_url}}"], "path": ["api", "products", ""] }
+          }
+        },
+        {
+          "name": "Фильтр: по цене (10000–50000 ₽)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/products/?min_price=10000&max_price=50000",
+              "host": ["{{base_url}}"], "path": ["api", "products", ""],
+              "query": [{ "key": "min_price", "value": "10000" }, { "key": "max_price", "value": "50000" }]
+            }
+          }
+        },
+        {
+          "name": "Фильтр: бренд Apple, со скидкой",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/products/?brand=Apple&on_sale=true",
+              "host": ["{{base_url}}"], "path": ["api", "products", ""],
+              "query": [{ "key": "brand", "value": "Apple" }, { "key": "on_sale", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "Фильтр: категория + состояние",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/products/?category=1&condition=new",
+              "host": ["{{base_url}}"], "path": ["api", "products", ""],
+              "query": [{ "key": "category", "value": "1" }, { "key": "condition", "value": "new" }]
+            }
+          }
+        },
+        {
+          "name": "Поиск по названию",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/products/?search=iPhone",
+              "host": ["{{base_url}}"], "path": ["api", "products", ""],
+              "query": [{ "key": "search", "value": "iPhone" }]
+            }
+          }
+        },
+        {
+          "name": "Товар по ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/1/", "host": ["{{base_url}}"], "path": ["api", "products", "1", ""] }
+          }
+        },
+        {
+          "name": "Создать товар (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro\",\n  \"category\": 1,\n  \"brand\": \"Apple\",\n  \"model\": \"15 Pro\",\n  \"price\": \"89990.00\",\n  \"condition\": \"new\",\n  \"stock_quantity\": 10,\n  \"warranty_months\": 12,\n  \"release_year\": 2023,\n  \"is_available\": true\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/products/", "host": ["{{base_url}}"], "path": ["api", "products", ""] }
+          }
+        },
+        {
+          "name": "Применить скидку (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"discount_percent\": 15\n}" },
+            "url": { "raw": "{{base_url}}/api/products/1/apply_discount/", "host": ["{{base_url}}"], "path": ["api", "products", "1", "apply_discount", ""] }
+          }
+        },
+        {
+          "name": "Пополнить склад (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 20\n}" },
+            "url": { "raw": "{{base_url}}/api/products/1/restock/", "host": ["{{base_url}}"], "path": ["api", "products", "1", "restock", ""] }
+          }
+        },
+        {
+          "name": "Товары со скидкой",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/on_sale/", "host": ["{{base_url}}"], "path": ["api", "products", "on_sale", ""] }
+          }
+        },
+        {
+          "name": "Товары с низким остатком",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/products/low_stock/", "host": ["{{base_url}}"], "path": ["api", "products", "low_stock", ""] }
+          }
+        },
+        {
+          "name": "Товары по категории (URL)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/by-category/1/", "host": ["{{base_url}}"], "path": ["api", "products", "by-category", "1", ""] }
+          }
+        },
+        {
+          "name": "Товары по бренду (URL)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/by-brand/Apple/", "host": ["{{base_url}}"], "path": ["api", "products", "by-brand", "Apple", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Список заказов (свои)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/", "host": ["{{base_url}}"], "path": ["api", "orders", ""] }
+          }
+        },
+        {
+          "name": "Создать заказ",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product\": 1,\n  \"customer_name\": \"Иван Иванов\",\n  \"customer_email\": \"ivan@example.com\",\n  \"customer_phone\": \"+79001234567\",\n  \"quantity\": 1,\n  \"delivery_address\": \"Москва, ул. Пушкина, д. 1\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/orders/", "host": ["{{base_url}}"], "path": ["api", "orders", ""] }
+          }
+        },
+        {
+          "name": "Мои заказы",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/my_orders/", "host": ["{{base_url}}"], "path": ["api", "orders", "my_orders", ""] }
+          }
+        },
+        {
+          "name": "Отменить заказ",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/1/cancel/", "host": ["{{base_url}}"], "path": ["api", "orders", "1", "cancel", ""] }
+          }
+        },
+        {
+          "name": "Изменить статус заказа (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"processing\"\n}" },
+            "url": { "raw": "{{base_url}}/api/orders/1/change_status/", "host": ["{{base_url}}"], "path": ["api", "orders", "1", "change_status", ""] }
+          }
+        },
+        {
+          "name": "Фильтр: заказы за период",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/orders/?date_from=2025-01-01&date_to=2025-12-31",
+              "host": ["{{base_url}}"], "path": ["api", "orders", ""],
+              "query": [{ "key": "date_from", "value": "2025-01-01" }, { "key": "date_to", "value": "2025-12-31" }]
+            }
+          }
+        },
+        {
+          "name": "Последние заказы (менеджер)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/recent/", "host": ["{{base_url}}"], "path": ["api", "orders", "recent", ""] }
+          }
+        },
+        {
+          "name": "Ожидающие заказы (менеджер)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/pending/", "host": ["{{base_url}}"], "path": ["api", "orders", "pending", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "Список поставщиков (менеджер)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/suppliers/", "host": ["{{base_url}}"], "path": ["api", "suppliers", ""] }
+          }
+        },
+        {
+          "name": "Топ поставщики",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/suppliers/top_rated/", "host": ["{{base_url}}"], "path": ["api", "suppliers", "top_rated", ""] }
+          }
+        },
+        {
+          "name": "Создать поставщика (администратор)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ООО Техснаб\",\n  \"contact_person\": \"Петров Пётр\",\n  \"contact_email\": \"supply@techsnab.ru\",\n  \"contact_phone\": \"+74951234567\",\n  \"address\": \"Москва, ул. Складская, д. 5\",\n  \"country\": \"Россия\",\n  \"rating\": 4.5\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/suppliers/", "host": ["{{base_url}}"], "path": ["api", "suppliers", ""] }
+          }
+        },
+        {
+          "name": "Добавить товары к поставщику",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"product_ids\": [1, 2, 3]\n}" },
+            "url": { "raw": "{{base_url}}/api/suppliers/1/add_products/", "host": ["{{base_url}}"], "path": ["api", "suppliers", "1", "add_products", ""] }
+          }
+        },
+        {
+          "name": "Обновить рейтинг (администратор)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 4.8\n}" },
+            "url": { "raw": "{{base_url}}/api/suppliers/1/update_rating/", "host": ["{{base_url}}"], "path": ["api", "suppliers", "1", "update_rating", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Список одобренных отзывов",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/reviews/", "host": ["{{base_url}}"], "path": ["api", "reviews", ""] }
+          }
+        },
+        {
+          "name": "Фильтр: отзывы на товар + оценка",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/reviews/?product=1&min_rating=4",
+              "host": ["{{base_url}}"], "path": ["api", "reviews", ""],
+              "query": [{ "key": "product", "value": "1" }, { "key": "min_rating", "value": "4" }]
+            }
+          }
+        },
+        {
+          "name": "Оставить отзыв",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Token {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product\": 1,\n  \"customer_name\": \"Иван Иванов\",\n  \"customer_email\": \"ivan@example.com\",\n  \"rating\": 5,\n  \"comment\": \"Отличный товар, рекомендую!\",\n  \"advantages\": \"Быстрая доставка, хорошее качество\",\n  \"disadvantages\": \"\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/reviews/", "host": ["{{base_url}}"], "path": ["api", "reviews", ""] }
+          }
+        },
+        {
+          "name": "Одобрить отзыв (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/reviews/1/approve/", "host": ["{{base_url}}"], "path": ["api", "reviews", "1", "approve", ""] }
+          }
+        },
+        {
+          "name": "Верифицировать покупку (менеджер)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/reviews/1/verify_purchase/", "host": ["{{base_url}}"], "path": ["api", "reviews", "1", "verify_purchase", ""] }
+          }
+        },
+        {
+          "name": "На модерации (менеджер)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/reviews/pending_approval/", "host": ["{{base_url}}"], "path": ["api", "reviews", "pending_approval", ""] }
+          }
+        },
+        {
+          "name": "Высокорейтинговые отзывы",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/reviews/high_rated/", "host": ["{{base_url}}"], "path": ["api", "reviews", "high_rated", ""] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Complex Queries",
+      "item": [
+        {
+          "name": "Запрос 1: дешёвые новые товары",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/complex_filter_1/", "host": ["{{base_url}}"], "path": ["api", "products", "complex_filter_1", ""] }
+          }
+        },
+        {
+          "name": "Запрос 2: крупные заказы техники",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/orders/complex_filter_2/", "host": ["{{base_url}}"], "path": ["api", "orders", "complex_filter_2", ""] }
+          }
+        },
+        {
+          "name": "Запрос 3: премиум категории",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/categories/complex_filter_3/", "host": ["{{base_url}}"], "path": ["api", "categories", "complex_filter_3", ""] }
+          }
+        },
+        {
+          "name": "Запрос 4: топ-бренды малый остаток",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/products/complex_filter_4/", "host": ["{{base_url}}"], "path": ["api", "products", "complex_filter_4", ""] }
+          }
+        },
+        {
+          "name": "Запрос 5: топ-поставщики Apple/Samsung",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Token {{token}}" }],
+            "url": { "raw": "{{base_url}}/api/suppliers/complex_filter_5/", "host": ["{{base_url}}"], "path": ["api", "suppliers", "complex_filter_5", ""] }
+          }
+        },
+        {
+          "name": "Запрос 6: свежие качественные отзывы",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/reviews/complex_filter_6/", "host": ["{{base_url}}"], "path": ["api", "reviews", "complex_filter_6", ""] }
+          }
+        }
+      ]
+    }
+  ]
+}

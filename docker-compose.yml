@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    restart: unless-stopped
+
+  web:
+    build: .
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      - REDIS_URL=redis://redis:6379/0
+      - EMAIL_HOST=mailhog
+      - EMAIL_PORT=1025
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - ENVIRONMENT=development
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    depends_on:
+      - redis
+      - mailhog
+
+  celery:
+    build: .
+    command: celery -A electronics_store worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=1
+      - REDIS_URL=redis://redis:6379/0
+      - EMAIL_HOST=mailhog
+      - EMAIL_PORT=1025
+    depends_on:
+      - redis
+      - mailhog
+
+  celery-beat:
+    build: .
+    command: celery -A electronics_store beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+    environment:
+      - DEBUG=1
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - web

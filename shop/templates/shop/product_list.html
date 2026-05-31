@@ -1,0 +1,306 @@
+{% extends 'shop/base.html' %}
+{% block title %}Каталог — TechStore{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .page-header h1 { font-size: 1.6rem; font-weight: 800; color: var(--text); }
+  .page-header .count { color: var(--text-muted); font-size: 0.95rem; margin-top: 2px; }
+
+  /* Filters */
+  .filters {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 24px;
+    margin-bottom: 28px;
+  }
+  .filter-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-wrap input:focus { border-color: var(--primary); }
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+  .filter-select {
+    padding: 10px 14px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    outline: none;
+    background: white;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    min-width: 150px;
+  }
+  .filter-select:focus { border-color: var(--primary); }
+  .sale-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    background: white;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text);
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .sale-toggle:has(input:checked) { border-color: #f6ad55; background: #fffbf0; color: #c05621; }
+  .sale-toggle input { display: none; }
+  .filter-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+  }
+  .filter-btn:hover { opacity: 0.9; }
+  .reset-link {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .reset-link:hover { background: var(--bg); }
+
+  /* Grid */
+  .products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 24px;
+  }
+
+  /* Card */
+  .product-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+  .product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.13);
+  }
+  .card-img {
+    height: 180px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    position: relative;
+  }
+  .sale-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #f6ad55;
+    color: #7b341e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .condition-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(255,255,255,0.25);
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 99px;
+    backdrop-filter: blur(4px);
+  }
+  .card-body { padding: 18px; flex: 1; display: flex; flex-direction: column; }
+  .card-brand { color: var(--primary); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .card-name { font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 4px; line-height: 1.3; }
+  .card-category { color: var(--text-muted); font-size: 0.82rem; margin-bottom: 14px; }
+
+  .card-price { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .price-current { font-size: 1.4rem; font-weight: 800; color: var(--text); }
+  .price-old { font-size: 0.9rem; color: var(--text-muted); text-decoration: line-through; }
+
+  .card-stock { font-size: 0.82rem; margin-bottom: 14px; margin-top: auto; }
+  .stock-in    { color: var(--success); }
+  .stock-low   { color: var(--warning); }
+  .stock-out   { color: var(--danger); }
+
+  .card-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    text-align: center;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: opacity 0.15s;
+  }
+  .card-btn:hover { opacity: 0.9; color: white; }
+
+  .empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .empty-state .emoji { font-size: 4rem; display: block; margin-bottom: 16px; }
+  .empty-state h3 { font-size: 1.4rem; margin-bottom: 8px; color: var(--text); }
+  .empty-state p { color: var(--text-muted); }
+
+  @media (max-width: 640px) {
+    .filter-row { flex-direction: column; }
+    .search-wrap { min-width: 100%; }
+    .filter-select { width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>🛍️ Каталог товаров</h1>
+    <p class="count">Найдено: {{ products.count }} товаров</p>
+  </div>
+  {% if user.is_authenticated %}
+    {% if user.profile.role == 'admin' or user.profile.role == 'manager' %}
+      <a href="{% url 'product_add' %}" class="btn btn-primary">+ Добавить товар</a>
+    {% endif %}
+  {% endif %}
+</div>
+
+<div class="filters">
+  <form method="GET" action="{% url 'product_list' %}">
+    <div class="filter-row">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" name="search" placeholder="Поиск по названию, бренду..." value="{{ search_query }}">
+      </div>
+
+      <select name="category" class="filter-select">
+        <option value="">Все категории</option>
+        {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if current_category == cat.id|stringformat:"s" %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <select name="sort" class="filter-select">
+        <option value="-created_at">Сначала новые</option>
+        <option value="price">Сначала дешёвые</option>
+        <option value="-price">Сначала дорогие</option>
+      </select>
+
+      <label class="sale-toggle">
+        <input type="checkbox" name="on_sale" value="true" {% if on_sale %}checked{% endif %}>
+        🔥 Со скидкой
+      </label>
+
+      <button type="submit" class="filter-btn">Найти</button>
+      <a href="{% url 'product_list' %}" class="reset-link">Сбросить</a>
+    </div>
+  </form>
+</div>
+
+{% if products %}
+  <div class="products-grid">
+    {% for product in products %}
+    <div class="product-card">
+      <div class="card-img">
+        {% if product.category.name == 'Смартфоны' %}📱
+        {% elif product.category.name == 'Ноутбуки' %}💻
+        {% elif product.category.name == 'Наушники' %}🎧
+        {% elif product.category.name == 'Телевизоры' %}📺
+        {% elif product.category.name == 'Планшеты' %}📟
+        {% else %}🖥️{% endif %}
+
+        {% if product.discount_price %}
+          <span class="sale-badge">СКИДКА</span>
+        {% endif %}
+        <span class="condition-badge">{{ product.get_condition_display }}</span>
+      </div>
+
+      <div class="card-body">
+        <div class="card-brand">{{ product.brand }}</div>
+        <div class="card-name">{{ product.name }}</div>
+        <div class="card-category">{{ product.category.name }}</div>
+
+        <div class="card-price">
+          {% if product.discount_price %}
+            <span class="price-current">{{ product.discount_price }} ₽</span>
+            <span class="price-old">{{ product.price }} ₽</span>
+          {% else %}
+            <span class="price-current">{{ product.price }} ₽</span>
+          {% endif %}
+        </div>
+
+        <div class="card-stock">
+          {% if product.stock_quantity == 0 %}
+            <span class="stock-out">✕ Нет в наличии</span>
+          {% elif product.stock_quantity < 5 %}
+            <span class="stock-low">⚡ Осталось {{ product.stock_quantity }} шт.</span>
+          {% else %}
+            <span class="stock-in">✓ В наличии ({{ product.stock_quantity }} шт.)</span>
+          {% endif %}
+        </div>
+
+        <a href="{% url 'product_detail' product.id %}" class="card-btn">Подробнее →</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <span class="emoji">🔍</span>
+    <h3>Ничего не найдено</h3>
+    <p>Попробуйте изменить параметры поиска или <a href="{% url 'product_list' %}">сбросить фильтры</a></p>
+  </div>
+{% endif %}
+{% endblock %}

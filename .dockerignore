@@ -1,0 +1,12 @@
+venv/
+env/
+*.pyc
+__pycache__/
+*.sqlite3
+.git/
+.gitignore
+*.md
+.env
+.vscode/
+.idea/
+*.log
