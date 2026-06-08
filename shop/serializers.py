@@ -1,7 +1,18 @@
 from datetime import date
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Category, Product, Order, Review, Supplier, UserProfile
+from .models import (
+    Category,
+    Product,
+    Order,
+    Review,
+    Supplier,
+    UserProfile,
+    Cart,
+    CartItem,
+    Favorite,
+)
+from .validators import validate_delivery_address, validate_order_amount
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -74,6 +85,8 @@ class ProductSerializer(serializers.ModelSerializer):
     reviews_count = serializers.IntegerField(read_only=True, default=0)
     avg_rating = serializers.FloatField(read_only=True, default=None, allow_null=True)
     total_ordered = serializers.IntegerField(read_only=True, default=0)
+    favorites_count = serializers.IntegerField(read_only=True, default=0)
+    is_favorite = serializers.SerializerMethodField()
     stock_alert = serializers.SerializerMethodField()
     can_order = serializers.SerializerMethodField()
 
@@ -84,10 +97,23 @@ class ProductSerializer(serializers.ModelSerializer):
             "price", "discount_price", "discount_percentage", "final_price",
             "condition", "stock_quantity", "warranty_months", "release_year", "is_available",
             "created_at", "updated_at",
-            "reviews_count", "avg_rating", "total_ordered",
-            "stock_alert", "can_order",
+            "reviews_count", "avg_rating", "total_ordered", "favorites_count",
+            "is_favorite", "stock_alert", "can_order",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+    def get_is_favorite(self, obj: Product) -> bool:
+        """
+        В избранном ли товар у текущего пользователя.
+
+        Args:
+            obj: Объект товара
+
+        Список id избранных товаров передаётся во вьюхе через контекст
+        (ключ ``favorites_products``) одним запросом — без N+1.
+        """
+        favorites_products = self.context.get("favorites_products", [])
+        return obj.id in favorites_products
 
     def get_discount_percentage(self, obj: Product) -> float:
         """Вычисляет процент скидки от обычной цены."""
@@ -214,6 +240,10 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Номер телефона должен содержать минимум 10 цифр")
         return value
 
+    def validate_delivery_address(self, value: str) -> str:
+        """Валидация формата адреса доставки (город, улица, дом, индекс)."""
+        return validate_delivery_address(value)
+
     def validate_quantity(self, value: int) -> int:
         """
         Валидация количества.
@@ -236,6 +266,20 @@ class OrderSerializer(serializers.ModelSerializer):
         if value > 100:
             raise serializers.ValidationError("Нельзя заказать больше 100 единиц товара за раз")
         return value
+
+    def validate(self, data: dict) -> dict:
+        """
+        Валидация суммы заказа: 500 ₽ ≤ сумма ≤ 100 000 ₽.
+
+        Args:
+            data: Валидированные поля заказа
+        """
+        product = data.get("product")
+        quantity = data.get("quantity")
+        if product and quantity:
+            unit_price = product.discount_price or product.price
+            validate_order_amount(unit_price * quantity)
+        return data
 
     def create(self, validated_data: dict) -> Order:
         """
@@ -362,3 +406,64 @@ class ReviewSerializer(serializers.ModelSerializer):
             ).exists():
                 raise serializers.ValidationError("Вы уже оставляли отзыв на этот товар")
         return data
+
+
+class CartItemSerializer(serializers.ModelSerializer):
+    """Сериализатор позиции корзины с вычисляемой стоимостью."""
+
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_brand = serializers.CharField(source="product.brand", read_only=True)
+    unit_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True
+    )
+    subtotal = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    available_stock = serializers.IntegerField(
+        source="product.stock_quantity", read_only=True
+    )
+
+    class Meta:
+        model = CartItem
+        fields = [
+            "id", "product", "product_name", "product_brand",
+            "quantity", "unit_price", "subtotal", "available_stock", "added_at",
+        ]
+        read_only_fields = ["added_at"]
+
+
+class CartSerializer(serializers.ModelSerializer):
+    """Сериализатор корзины с позициями и итоговой суммой."""
+
+    items = CartItemSerializer(many=True, read_only=True)
+    total_price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
+    total_quantity = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Cart
+        fields = ["id", "items", "total_price", "total_quantity", "updated_at"]
+
+
+class FavoriteSerializer(serializers.ModelSerializer):
+    """Сериализатор записи избранного с краткой информацией о товаре."""
+
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    product_brand = serializers.CharField(source="product.brand", read_only=True)
+    product_price = serializers.DecimalField(
+        source="product.price", max_digits=10, decimal_places=2, read_only=True
+    )
+    product_final_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Favorite
+        fields = [
+            "id", "product", "product_name", "product_brand",
+            "product_price", "product_final_price", "created_at",
+        ]
+        read_only_fields = ["created_at"]
+
+    def get_product_final_price(self, obj: Favorite):
+        """Итоговая цена товара с учётом скидки."""
+        return obj.product.discount_price or obj.product.price

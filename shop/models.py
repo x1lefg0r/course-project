@@ -297,3 +297,106 @@ def create_user_profile(sender, instance, created, **kwargs) -> None:
     """Автоматически создаёт профиль при регистрации нового пользователя."""
     if created:
         UserProfile.objects.get_or_create(user=instance)
+
+
+class Cart(models.Model):
+    """Корзина покупок пользователя (одна на пользователя)."""
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="cart",
+        verbose_name="Пользователь",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата создания")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Дата обновления")
+
+    class Meta:
+        verbose_name = "Корзина"
+        verbose_name_plural = "Корзины"
+
+    def __str__(self) -> str:
+        return f"Корзина {self.user.username}"
+
+    @property
+    def total_price(self):
+        """Суммарная стоимость всех позиций корзины с учётом скидок."""
+        return sum((item.subtotal for item in self.items.all()), 0)
+
+    @property
+    def total_quantity(self) -> int:
+        """Общее количество единиц товара в корзине."""
+        return sum(item.quantity for item in self.items.all())
+
+
+class CartItem(models.Model):
+    """Позиция в корзине: товар и его количество."""
+
+    cart = models.ForeignKey(
+        Cart, on_delete=models.CASCADE, related_name="items", verbose_name="Корзина"
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="cart_items",
+        verbose_name="Товар",
+    )
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
+    added_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата добавления")
+
+    class Meta:
+        verbose_name = "Позиция корзины"
+        verbose_name_plural = "Позиции корзины"
+        unique_together = [["cart", "product"]]
+        ordering = ["-added_at"]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} × {self.quantity}"
+
+    @property
+    def unit_price(self):
+        """Цена за единицу с учётом скидки."""
+        return self.product.discount_price or self.product.price
+
+    @property
+    def subtotal(self):
+        """Стоимость позиции: цена за единицу × количество."""
+        return self.unit_price * self.quantity
+
+    def clean(self) -> None:
+        """Валидация наличия товара на складе."""
+        if self.quantity <= 0:
+            raise ValidationError({"quantity": "Количество должно быть больше нуля"})
+        if self.product and self.quantity > self.product.stock_quantity:
+            raise ValidationError(
+                {
+                    "quantity": f"Недостаточно товара на складе. Доступно: {self.product.stock_quantity}"
+                }
+            )
+
+
+class Favorite(models.Model):
+    """Товар, добавленный пользователем в избранное."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="favorites",
+        verbose_name="Пользователь",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="favorited_by",
+        verbose_name="Товар",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Дата добавления")
+
+    class Meta:
+        verbose_name = "Избранное"
+        verbose_name_plural = "Избранное"
+        unique_together = [["user", "product"]]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} ♥ {self.product.name}"

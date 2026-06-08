@@ -1,11 +1,16 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
+from django.core import mail
 from django.core.exceptions import ValidationError
 from rest_framework.test import APITestCase
 from rest_framework.authtoken.models import Token
 from rest_framework import status
 
-from .models import Category, Product, Order, Review, Supplier, UserProfile
+from .models import (
+    Category, Product, Order, Review, Supplier, UserProfile, CartItem, Favorite,
+)
+
+VALID_ADDRESS = "г. Москва, ул. Тверская, д. 10, 125009"
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +159,7 @@ class TestOrderBuyerQuantityLimit(APITestCase):
             "customer_email": "ivan@test.com",
             "customer_phone": "+79001234567",
             "quantity": quantity,
-            "delivery_address": "Москва",
+            "delivery_address": "г. Москва, ул. Тверская, д. 10, 125009",
         }
 
     def test_buyer_cannot_order_more_than_10(self) -> None:
@@ -187,7 +192,7 @@ class TestOrderStockManagement(APITestCase):
             "product": self.product.id,
             "customer_name": "Иван", "customer_email": "ivan@test.com",
             "customer_phone": "+79001234567", "quantity": 3,
-            "delivery_address": "Москва",
+            "delivery_address": "г. Москва, ул. Тверская, д. 10, 125009",
         }
         self.client.post("/api/orders/", data, format="json")
         self.product.refresh_from_db()
@@ -492,3 +497,183 @@ class TestReviewModerationInfoVisibility(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         for review in resp.data["results"]:
             self.assertIsNotNone(review["moderation_info"])
+
+
+# ---------------------------------------------------------------------------
+# 13. Cart — добавление товара и проверка наличия на складе
+# ---------------------------------------------------------------------------
+
+class TestCartAddItem(APITestCase):
+    """Проверяет добавление товаров в корзину и валидацию остатка."""
+
+    def setUp(self) -> None:
+        self.category = Category.objects.create(name="Тест", is_active=True)
+        self.product = make_product(self.category, price=1000, stock=5)
+        self.buyer = make_user("cart_buyer", UserProfile.BUYER)
+        auth_client(self.client, self.buyer)
+
+    def test_add_item_creates_cart_position(self) -> None:
+        """Добавление товара создаёт позицию и считает сумму."""
+        resp = self.client.post(
+            "/api/cart/add_item/", {"product": self.product.id, "quantity": 2}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["total_quantity"], 2)
+        self.assertEqual(float(resp.data["total_price"]), 2000)
+
+    def test_add_item_rejects_over_stock(self) -> None:
+        """Нельзя добавить больше, чем есть на складе (400)."""
+        resp = self.client.post(
+            "/api/cart/add_item/", {"product": self.product.id, "quantity": 99}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(CartItem.objects.count(), 0)
+
+    def test_add_item_accumulates_quantity(self) -> None:
+        """Повторное добавление суммирует количество."""
+        self.client.post("/api/cart/add_item/", {"product": self.product.id, "quantity": 1}, format="json")
+        self.client.post("/api/cart/add_item/", {"product": self.product.id, "quantity": 2}, format="json")
+        item = CartItem.objects.get(product=self.product)
+        self.assertEqual(item.quantity, 3)
+
+
+# ---------------------------------------------------------------------------
+# 14. Cart — оформление заказа (checkout) из корзины
+# ---------------------------------------------------------------------------
+
+class TestCartCheckout(APITestCase):
+    """Проверяет оформление заказа из корзины."""
+
+    def setUp(self) -> None:
+        self.category = Category.objects.create(name="Тест", is_active=True)
+        self.product = make_product(self.category, price=1000, stock=10)
+        self.buyer = make_user("checkout_buyer", UserProfile.BUYER)
+        auth_client(self.client, self.buyer)
+        self.client.post(
+            "/api/cart/add_item/", {"product": self.product.id, "quantity": 3}, format="json"
+        )
+
+    def _checkout(self, address: str = VALID_ADDRESS):
+        return self.client.post(
+            "/api/cart/checkout/",
+            {
+                "customer_name": "Иван Иванов",
+                "customer_email": "ivan@test.com",
+                "customer_phone": "+79001234567",
+                "delivery_address": address,
+            },
+            format="json",
+        )
+
+    def test_checkout_creates_order_and_clears_cart(self) -> None:
+        """Checkout создаёт заказ, списывает склад, очищает корзину и шлёт письмо."""
+        resp = self._checkout()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(resp.data["order_ids"]), 1)
+        self.assertEqual(Order.objects.filter(user=self.buyer).count(), 1)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock_quantity, 7)
+        self.assertEqual(CartItem.objects.count(), 0)
+        # Письмо-подтверждение ушло покупателю
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("ivan@test.com", mail.outbox[0].to)
+
+    def test_checkout_rejects_invalid_address(self) -> None:
+        """Checkout с некорректным адресом отклоняется (400)."""
+        resp = self._checkout(address="Москва")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_checkout_empty_cart_rejected(self) -> None:
+        """Checkout с пустой корзиной отклоняется (400)."""
+        self.client.post("/api/cart/clear/", format="json")
+        resp = self._checkout()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# ---------------------------------------------------------------------------
+# 15. Favorites — переключение и поле is_favorite через контекст
+# ---------------------------------------------------------------------------
+
+class TestFavorites(APITestCase):
+    """Проверяет избранное: toggle, is_favorite, аннотацию favorites_count."""
+
+    def setUp(self) -> None:
+        self.category = Category.objects.create(name="Тест", is_active=True)
+        self.product = make_product(self.category)
+        self.buyer = make_user("fav_buyer", UserProfile.BUYER)
+        auth_client(self.client, self.buyer)
+
+    def test_toggle_adds_then_removes(self) -> None:
+        """Первый toggle добавляет в избранное, второй — убирает."""
+        resp1 = self.client.post("/api/favorites/toggle/", {"product": self.product.id}, format="json")
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(resp1.data["is_favorite"])
+        self.assertEqual(Favorite.objects.filter(user=self.buyer).count(), 1)
+
+        resp2 = self.client.post("/api/favorites/toggle/", {"product": self.product.id}, format="json")
+        self.assertFalse(resp2.data["is_favorite"])
+        self.assertEqual(Favorite.objects.filter(user=self.buyer).count(), 0)
+
+    def test_is_favorite_flag_in_product_list(self) -> None:
+        """Поле is_favorite в списке товаров отражает избранное пользователя."""
+        Favorite.objects.create(user=self.buyer, product=self.product)
+        resp = self.client.get("/api/products/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        target = next(p for p in resp.data["results"] if p["id"] == self.product.id)
+        self.assertTrue(target["is_favorite"])
+        self.assertEqual(target["favorites_count"], 1)
+
+    def test_favorites_only_own(self) -> None:
+        """Пользователь видит в избранном только свои записи."""
+        other = make_user("fav_other", UserProfile.BUYER)
+        Favorite.objects.create(user=other, product=self.product)
+        resp = self.client.get("/api/favorites/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["count"], 0)
+
+
+# ---------------------------------------------------------------------------
+# 16. Валидация адреса доставки и суммы заказа
+# ---------------------------------------------------------------------------
+
+class TestOrderValidationRules(APITestCase):
+    """Проверяет валидацию формата адреса и суммы заказа при создании."""
+
+    def setUp(self) -> None:
+        self.category = Category.objects.create(name="Тест", is_active=True)
+        self.buyer = make_user("val_buyer", UserProfile.BUYER)
+        auth_client(self.client, self.buyer)
+
+    def _order(self, product: Product, quantity: int, address: str = VALID_ADDRESS) -> dict:
+        return {
+            "product": product.id,
+            "customer_name": "Иван", "customer_email": "ivan@test.com",
+            "customer_phone": "+79001234567", "quantity": quantity,
+            "delivery_address": address,
+        }
+
+    def test_invalid_address_rejected(self) -> None:
+        """Адрес без индекса и компонентов отклоняется (400)."""
+        product = make_product(self.category, price=1000, stock=10)
+        resp = self.client.post("/api/orders/", self._order(product, 1, address="Москва"), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("delivery_address", resp.data)
+
+    def test_amount_below_minimum_rejected(self) -> None:
+        """Сумма заказа меньше 500 ₽ отклоняется (400)."""
+        cheap = make_product(self.category, name="Дешёвый", price=100, stock=10)
+        resp = self.client.post("/api/orders/", self._order(cheap, 1), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_amount_above_maximum_rejected(self) -> None:
+        """Сумма заказа больше 100 000 ₽ отклоняется (400)."""
+        pricey = make_product(self.category, name="Дорогой", price=60000, stock=10)
+        resp = self.client.post("/api/orders/", self._order(pricey, 2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_valid_order_passes(self) -> None:
+        """Корректный заказ (адрес + сумма в норме) проходит (201)."""
+        product = make_product(self.category, price=1000, stock=10)
+        resp = self.client.post("/api/orders/", self._order(product, 2), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)

@@ -183,7 +183,9 @@ SILKY_META_PROFILING = True
 # ---------------------------------------------------------------------------
 # Email (Mailhog для разработки)
 # ---------------------------------------------------------------------------
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
+)
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "1025"))
 EMAIL_HOST_USER = ""

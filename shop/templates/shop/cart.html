@@ -1,0 +1,101 @@
+{% extends 'shop/base.html' %}
+{% block title %}Корзина — TechStore{% endblock %}
+
+{% block extra_css %}
+<style>
+  .cart-header { font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; }
+  .cart-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+
+  .cart-items { display: grid; gap: 14px; }
+  .cart-item {
+    display: flex; align-items: center; gap: 16px;
+    background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px;
+  }
+  .ci-icon { font-size: 2.4rem; width: 60px; text-align: center; }
+  .ci-info { flex: 1; min-width: 0; }
+  .ci-brand { color: var(--primary); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; }
+  .ci-name { font-weight: 700; font-size: 1.02rem; margin: 2px 0; }
+  .ci-name a { color: var(--text); }
+  .ci-price { color: var(--text-muted); font-size: 0.88rem; }
+  .ci-qty { display: flex; align-items: center; gap: 6px; }
+  .ci-qty input { width: 64px; padding: 8px; border: 2px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.95rem; outline: none; }
+  .ci-qty input:focus { border-color: var(--primary); }
+  .ci-qty button { padding: 8px 12px; border: 2px solid var(--border); background: white; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+  .ci-qty button:hover { border-color: var(--primary); color: var(--primary); }
+  .ci-subtotal { font-weight: 800; font-size: 1.1rem; min-width: 110px; text-align: right; }
+  .ci-remove { color: var(--danger); background: none; border: none; cursor: pointer; font-size: 1.3rem; padding: 4px 8px; }
+  .ci-remove:hover { color: #c53030; }
+
+  .cart-summary { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; position: sticky; top: 88px; }
+  .cs-row { display: flex; justify-content: space-between; margin-bottom: 12px; color: var(--text-muted); }
+  .cs-total { display: flex; justify-content: space-between; font-size: 1.3rem; font-weight: 800; color: var(--text); padding-top: 14px; border-top: 2px solid var(--border); margin-top: 8px; }
+  .checkout-btn {
+    display: block; width: 100%; text-align: center; margin-top: 18px; padding: 13px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white; border-radius: 10px; font-weight: 700; font-size: 1rem; transition: opacity 0.15s;
+  }
+  .checkout-btn:hover { opacity: 0.9; color: white; }
+  .clear-link { display: block; text-align: center; margin-top: 10px; color: var(--text-muted); font-size: 0.85rem; }
+
+  .empty-cart { text-align: center; padding: 80px 20px; background: white; border-radius: var(--radius); box-shadow: var(--shadow); }
+  .empty-cart .emoji { font-size: 4.5rem; display: block; margin-bottom: 16px; }
+  .empty-cart h3 { font-size: 1.4rem; margin-bottom: 8px; }
+  .empty-cart p { color: var(--text-muted); margin-bottom: 20px; }
+
+  @media (max-width: 860px) {
+    .cart-layout { grid-template-columns: 1fr; }
+    .cart-summary { position: static; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="cart-header">🛒 Корзина</h1>
+
+{% if items %}
+<div class="cart-layout">
+  <div class="cart-items">
+    {% for item in items %}
+    <div class="cart-item">
+      <div class="ci-icon">
+        {% if item.product.category.name == 'Смартфоны' %}📱
+        {% elif item.product.category.name == 'Ноутбуки' %}💻
+        {% elif item.product.category.name == 'Наушники' %}🎧
+        {% else %}🖥️{% endif %}
+      </div>
+      <div class="ci-info">
+        <div class="ci-brand">{{ item.product.brand }}</div>
+        <div class="ci-name"><a href="{% url 'product_detail' item.product.id %}">{{ item.product.name }}</a></div>
+        <div class="ci-price">{{ item.unit_price }} ₽ / шт. · на складе {{ item.product.stock_quantity }} шт.</div>
+      </div>
+      <form method="POST" action="{% url 'cart_update' %}" class="ci-qty">
+        {% csrf_token %}
+        <input type="hidden" name="product_id" value="{{ item.product.id }}">
+        <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock_quantity }}">
+        <button type="submit">Обновить</button>
+      </form>
+      <div class="ci-subtotal">{{ item.subtotal }} ₽</div>
+      <form method="POST" action="{% url 'cart_remove' item.product.id %}" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="ci-remove" title="Удалить">✕</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="cart-summary">
+    <div class="cs-row"><span>Товаров</span><span>{{ cart.total_quantity }} шт.</span></div>
+    <div class="cs-total"><span>Итого</span><span>{{ cart.total_price }} ₽</span></div>
+    <a href="{% url 'cart_checkout' %}" class="checkout-btn">Оформить заказ →</a>
+    <a href="{% url 'product_list' %}" class="clear-link">← Продолжить покупки</a>
+  </div>
+</div>
+{% else %}
+<div class="empty-cart">
+  <span class="emoji">🛒</span>
+  <h3>Корзина пуста</h3>
+  <p>Добавьте товары из каталога, чтобы оформить заказ</p>
+  <a href="{% url 'product_list' %}" class="btn btn-primary">Перейти в каталог</a>
+</div>
+{% endif %}
+{% endblock %}

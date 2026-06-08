@@ -3,7 +3,9 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Thunderobot\\\\Desktop\\\\Учеба\\\\веб\\\\django-proj\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(venv/bin/python --version)",
+      "Bash(venv/bin/python manage.py test shop.tests)"
     ]
   }
 }

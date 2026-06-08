@@ -1,0 +1,88 @@
+{% extends 'shop/base.html' %}
+{% block title %}Оформление заказа — TechStore{% endblock %}
+
+{% block extra_css %}
+<style>
+  .co-header { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; }
+  .co-sub { color: var(--text-muted); margin-bottom: 24px; }
+  .co-layout { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+
+  .co-form { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px; }
+  .co-form h3 { font-size: 1.1rem; margin-bottom: 18px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.88rem; }
+  .form-group input, .form-group textarea {
+    width: 100%; padding: 11px 13px; border: 2px solid var(--border);
+    border-radius: 8px; font-size: 0.95rem; outline: none; transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); }
+  .form-group .hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .submit-btn {
+    width: 100%; margin-top: 8px; padding: 13px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white; border: none; border-radius: 10px; font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  .submit-btn:hover { opacity: 0.9; }
+
+  .co-summary { background: white; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; position: sticky; top: 88px; }
+  .co-summary h3 { font-size: 1rem; margin-bottom: 16px; }
+  .so-item { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 10px; color: var(--text-muted); }
+  .so-item span:first-child { color: var(--text); }
+  .so-total { display: flex; justify-content: space-between; font-size: 1.2rem; font-weight: 800; padding-top: 14px; border-top: 2px solid var(--border); margin-top: 8px; }
+  .amount-note { font-size: 0.78rem; color: var(--text-muted); margin-top: 12px; line-height: 1.5; }
+
+  @media (max-width: 860px) { .co-layout { grid-template-columns: 1fr; } .co-summary { position: static; } .form-row { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'cart' %}" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--text-muted);">← Назад в корзину</a>
+<h1 class="co-header">📦 Оформление заказа</h1>
+<p class="co-sub">Заполните данные доставки — заказ будет создан для каждой позиции корзины.</p>
+
+<div class="co-layout">
+  <div class="co-form">
+    <form method="POST" action="{% url 'cart_checkout' %}">
+      {% csrf_token %}
+      <h3>Контактные данные</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Имя получателя *</label>
+          <input type="text" name="customer_name" value="{{ user.get_full_name|default:user.username }}" required>
+        </div>
+        <div class="form-group">
+          <label>Email *</label>
+          <input type="email" name="customer_email" value="{{ user.email }}" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Телефон *</label>
+        <input type="text" name="customer_phone" placeholder="+7 900 123-45-67" required>
+        <div class="hint">Минимум 10 цифр</div>
+      </div>
+
+      <h3 style="margin-top:24px;">Адрес доставки</h3>
+      <div class="form-group">
+        <label>Полный адрес *</label>
+        <textarea name="delivery_address" rows="2" placeholder="г. Москва, ул. Тверская, д. 10, кв. 5, 125009" required></textarea>
+        <div class="hint">Укажите город, улицу, дом и почтовый индекс (6 цифр) через запятую</div>
+      </div>
+
+      <button type="submit" class="submit-btn">Подтвердить заказ</button>
+    </form>
+  </div>
+
+  <div class="co-summary">
+    <h3>Ваш заказ</h3>
+    {% for item in items %}
+    <div class="so-item">
+      <span>{{ item.product.name }} × {{ item.quantity }}</span>
+      <span>{{ item.subtotal }} ₽</span>
+    </div>
+    {% endfor %}
+    <div class="so-total"><span>Итого</span><span>{{ cart.total_price }} ₽</span></div>
+    <p class="amount-note">Сумма заказа должна быть в пределах 500–100 000 ₽.</p>
+  </div>
+</div>
+{% endblock %}

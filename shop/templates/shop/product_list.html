@@ -183,6 +183,22 @@
   }
   .card-btn:hover { opacity: 0.9; color: white; }
 
+  /* Card actions */
+  .card-actions { display: flex; gap: 8px; align-items: stretch; }
+  .card-actions .card-btn { flex: 1; }
+  .icon-form { margin: 0; display: flex; }
+  .fav-btn, .cart-btn-sm {
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--border); background: white;
+    border-radius: 8px; cursor: pointer; font-size: 1.1rem;
+    width: 44px; transition: all 0.15s;
+  }
+  .fav-btn:hover { border-color: var(--danger); background: #fff5f5; }
+  .fav-btn.active { border-color: var(--danger); background: #fff5f5; }
+  .cart-btn-sm { width: auto; padding: 0 14px; font-size: 0.85rem; font-weight: 600; gap: 6px; color: var(--text); }
+  .cart-btn-sm:hover:not(:disabled) { border-color: var(--primary); background: #f0f0ff; color: var(--primary); }
+  .cart-btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+
   .empty-state {
     text-align: center;
     padding: 80px 20px;
@@ -291,7 +307,23 @@
           {% endif %}
         </div>
 
-        <a href="{% url 'product_detail' product.id %}" class="card-btn">Подробнее →</a>
+        <div class="card-actions">
+          <a href="{% url 'product_detail' product.id %}" class="card-btn">Подробнее →</a>
+          {% if user.is_authenticated %}
+            <form method="POST" action="{% url 'cart_add' product.id %}" class="icon-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="cart-btn-sm" {% if product.stock_quantity == 0 %}disabled{% endif %} title="В корзину">🛒</button>
+            </form>
+            <form method="POST" action="{% url 'favorite_toggle' product.id %}" class="icon-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="fav-btn {% if product.id in favorite_ids %}active{% endif %}" title="В избранное">
+                {% if product.id in favorite_ids %}❤️{% else %}🤍{% endif %}
+              </button>
+            </form>
+          {% endif %}
+        </div>
       </div>
     </div>
     {% endfor %}

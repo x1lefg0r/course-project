@@ -6,6 +6,8 @@ from .views import (
     OrderViewSet,
     SupplierViewSet,
     ReviewViewSet,
+    CartViewSet,
+    FavoriteViewSet,
     product_list,
     product_detail,
     add_review,
@@ -13,6 +15,13 @@ from .views import (
     web_login_view,
     web_register_view,
     web_logout_view,
+    cart_view,
+    cart_add,
+    cart_update,
+    cart_remove,
+    cart_checkout,
+    favorites_view,
+    favorite_toggle,
 )
 
 
@@ -22,12 +31,23 @@ router.register(r"products", ProductViewSet, basename="product")
 router.register(r"orders", OrderViewSet, basename="order")
 router.register(r"suppliers", SupplierViewSet, basename="supplier")
 router.register(r"reviews", ReviewViewSet, basename="review")
+router.register(r"cart", CartViewSet, basename="cart")
+router.register(r"favorites", FavoriteViewSet, basename="favorite")
 
 urlpatterns = [
     # Веб-страницы
     path("", product_list, name="product_list"),
     path("product/<int:pk>/", product_detail, name="product_detail"),
     path("product/<int:product_id>/add-review/", add_review, name="add_review"),
+    # Корзина (веб)
+    path("cart/", cart_view, name="cart"),
+    path("cart/add/<int:product_id>/", cart_add, name="cart_add"),
+    path("cart/update/", cart_update, name="cart_update"),
+    path("cart/remove/<int:product_id>/", cart_remove, name="cart_remove"),
+    path("cart/checkout/", cart_checkout, name="cart_checkout"),
+    # Избранное (веб)
+    path("favorites/", favorites_view, name="favorites"),
+    path("favorites/toggle/<int:product_id>/", favorite_toggle, name="favorite_toggle"),
     # API
     path("api/", include(router.urls)),
     # Фильтр по именованным аргументам в URL

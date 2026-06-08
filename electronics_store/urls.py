@@ -30,6 +30,5 @@ urlpatterns = [
     path("api/auth/token/", obtain_auth_token, name="api-token-auth"),
     path("api/auth/register/", register_view, name="api-register"),
     path("api/auth/profile/", profile_view, name="api-profile"),
-    path("api/", include("shop.urls")),
     path("", include("shop.urls")),
 ]

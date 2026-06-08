@@ -1,0 +1,76 @@
+{% extends 'shop/base.html' %}
+{% block title %}Избранное — TechStore{% endblock %}
+
+{% block extra_css %}
+<style>
+  .fav-header { font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; }
+  .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 24px; }
+  .product-card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s; }
+  .product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.13); }
+  .card-img { height: 170px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); display: flex; align-items: center; justify-content: center; font-size: 3.6rem; }
+  .card-body { padding: 18px; flex: 1; display: flex; flex-direction: column; }
+  .card-brand { color: var(--primary); font-weight: 700; font-size: 0.8rem; text-transform: uppercase; }
+  .card-name { font-size: 1.05rem; font-weight: 700; margin: 4px 0; }
+  .card-price { font-size: 1.3rem; font-weight: 800; margin: 6px 0 14px; }
+  .card-price .old { font-size: 0.85rem; color: var(--text-muted); text-decoration: line-through; font-weight: 500; margin-left: 6px; }
+  .card-actions { display: flex; gap: 8px; margin-top: auto; }
+  .card-btn { flex: 1; padding: 10px; text-align: center; border-radius: 8px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; font-weight: 600; font-size: 0.9rem; }
+  .card-btn:hover { opacity: 0.9; color: white; }
+  .icon-form { margin: 0; }
+  .fav-btn, .cart-btn-sm { display: flex; align-items: center; justify-content: center; border: 2px solid var(--border); background: white; border-radius: 8px; cursor: pointer; font-size: 1.1rem; padding: 0 12px; height: 100%; }
+  .fav-btn { border-color: var(--danger); background: #fff5f5; }
+  .cart-btn-sm:hover { border-color: var(--primary); }
+
+  .empty-fav { text-align: center; padding: 80px 20px; background: white; border-radius: var(--radius); box-shadow: var(--shadow); }
+  .empty-fav .emoji { font-size: 4.5rem; display: block; margin-bottom: 16px; }
+  .empty-fav h3 { font-size: 1.4rem; margin-bottom: 8px; }
+  .empty-fav p { color: var(--text-muted); margin-bottom: 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="fav-header">❤️ Избранное</h1>
+
+{% if products %}
+<div class="products-grid">
+  {% for product in products %}
+  <div class="product-card">
+    <div class="card-img">
+      {% if product.category.name == 'Смартфоны' %}📱
+      {% elif product.category.name == 'Ноутбуки' %}💻
+      {% elif product.category.name == 'Наушники' %}🎧
+      {% else %}🖥️{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="card-brand">{{ product.brand }}</div>
+      <div class="card-name">{{ product.name }}</div>
+      <div class="card-price">
+        {% if product.discount_price %}{{ product.discount_price }} ₽<span class="old">{{ product.price }} ₽</span>
+        {% else %}{{ product.price }} ₽{% endif %}
+      </div>
+      <div class="card-actions">
+        <a href="{% url 'product_detail' product.id %}" class="card-btn">Подробнее →</a>
+        <form method="POST" action="{% url 'cart_add' product.id %}" class="icon-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'favorites' %}">
+          <button type="submit" class="cart-btn-sm" {% if product.stock_quantity == 0 %}disabled{% endif %} title="В корзину">🛒</button>
+        </form>
+        <form method="POST" action="{% url 'favorite_toggle' product.id %}" class="icon-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'favorites' %}">
+          <button type="submit" class="fav-btn" title="Убрать из избранного">❤️</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-fav">
+  <span class="emoji">💔</span>
+  <h3>В избранном пусто</h3>
+  <p>Нажимайте 🤍 на товарах, чтобы сохранить их здесь</p>
+  <a href="{% url 'product_list' %}" class="btn btn-primary">Перейти в каталог</a>
+</div>
+{% endif %}
+{% endblock %}

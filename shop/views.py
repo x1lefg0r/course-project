@@ -3,14 +3,17 @@ from datetime import date, timedelta
 from django.db.models import Count, Avg, Sum, Q
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth import authenticate, login, logout
-from rest_framework import viewsets, filters, status
+from django.contrib.auth.models import User
+from rest_framework import viewsets, filters, status, serializers
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .filters import ProductFilter, OrderFilter, ReviewFilter, SupplierFilter
-from .models import Category, Product, Order, Supplier, Review, UserProfile
+from .models import (
+    Category, Product, Order, Supplier, Review, UserProfile, Cart, CartItem, Favorite,
+)
 from .permissions import IsAdminRole, IsManagerOrAdmin, IsOwnerOrManagerAdmin
 from .serializers import (
     CategorySerializer,
@@ -20,7 +23,11 @@ from .serializers import (
     ReviewSerializer,
     UserProfileSerializer,
     UserRegisterSerializer,
+    CartSerializer,
+    FavoriteSerializer,
 )
+from .validators import validate_delivery_address, validate_order_amount
+from .emails import send_order_confirmation
 from .queries import (
     complex_query_1,
     complex_query_2,
@@ -168,12 +175,28 @@ class ProductViewSet(viewsets.ModelViewSet):
         reviews_count=Count("reviews", filter=Q(reviews__is_approved=True), distinct=True),
         avg_rating=Avg("reviews__rating", filter=Q(reviews__is_approved=True)),
         total_ordered=Sum("orders__quantity"),
+        favorites_count=Count("favorited_by", distinct=True),
     )
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ProductFilter
     search_fields = ["name", "brand", "model", "description"]
     ordering_fields = ["price", "created_at", "stock_quantity", "release_year", "avg_rating"]
+
+    def get_serializer_context(self) -> dict:
+        """
+        Дополняет контекст списком id избранных товаров пользователя.
+
+        Список получается одним запросом и используется сериализатором
+        для поля ``is_favorite`` (без N+1 на каждый товар).
+        """
+        context = super().get_serializer_context()
+        user = self.request.user
+        if user.is_authenticated:
+            context["favorites_products"] = list(
+                Favorite.objects.filter(user=user).values_list("product_id", flat=True)
+            )
+        return context
 
     def get_permissions(self):
         """
@@ -638,6 +661,217 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
 
 # ---------------------------------------------------------------------------
+# Cart & Favorites API
+# ---------------------------------------------------------------------------
+
+class CartViewSet(viewsets.ViewSet):
+    """API корзины текущего пользователя: позиции, изменение, оформление заказа."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _get_cart(self, user) -> Cart:
+        """Возвращает (создавая при необходимости) корзину пользователя."""
+        cart, _ = Cart.objects.get_or_create(user=user)
+        return cart
+
+    def list(self, request):
+        """Содержимое корзины текущего пользователя (GET /api/cart/)."""
+        cart = self._get_cart(request.user)
+        return Response(CartSerializer(cart, context={"request": request}).data)
+
+    @action(methods=["POST"], detail=False)
+    def add_item(self, request):
+        """
+        Добавить товар в корзину или увеличить его количество.
+
+        Args:
+            request: HTTP-запрос с полями product (id) и quantity (по умолчанию 1)
+
+        BL: проверяется наличие запрошенного количества на складе.
+        """
+        cart = self._get_cart(request.user)
+        product = get_object_or_404(Product, pk=request.data.get("product"))
+        try:
+            quantity = int(request.data.get("quantity", 1))
+        except (TypeError, ValueError):
+            return Response({"error": "Некорректное количество"}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            return Response({"error": "Количество должно быть больше нуля"}, status=status.HTTP_400_BAD_REQUEST)
+
+        item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+        new_quantity = quantity if created else item.quantity + quantity
+        if new_quantity > product.stock_quantity:
+            if created:
+                item.delete()
+            return Response(
+                {"error": f"Недостаточно товара на складе. Доступно: {product.stock_quantity}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item.quantity = new_quantity
+        item.save()
+        return Response(CartSerializer(cart, context={"request": request}).data, status=status.HTTP_200_OK)
+
+    @action(methods=["POST"], detail=False)
+    def update_item(self, request):
+        """
+        Установить точное количество товара в корзине.
+
+        Args:
+            request: HTTP-запрос с полями product (id) и quantity
+        """
+        cart = self._get_cart(request.user)
+        item = get_object_or_404(CartItem, cart=cart, product_id=request.data.get("product"))
+        try:
+            quantity = int(request.data.get("quantity"))
+        except (TypeError, ValueError):
+            return Response({"error": "Некорректное количество"}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity <= 0:
+            item.delete()
+            return Response(CartSerializer(cart, context={"request": request}).data)
+        if quantity > item.product.stock_quantity:
+            return Response(
+                {"error": f"Недостаточно товара на складе. Доступно: {item.product.stock_quantity}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        item.quantity = quantity
+        item.save()
+        return Response(CartSerializer(cart, context={"request": request}).data)
+
+    @action(methods=["POST"], detail=False)
+    def remove_item(self, request):
+        """
+        Удалить товар из корзины.
+
+        Args:
+            request: HTTP-запрос с полем product (id)
+        """
+        cart = self._get_cart(request.user)
+        CartItem.objects.filter(cart=cart, product_id=request.data.get("product")).delete()
+        return Response(CartSerializer(cart, context={"request": request}).data)
+
+    @action(methods=["POST"], detail=False)
+    def clear(self, request):
+        """Полностью очистить корзину."""
+        cart = self._get_cart(request.user)
+        cart.items.all().delete()
+        return Response(CartSerializer(cart, context={"request": request}).data)
+
+    @action(methods=["POST"], detail=False)
+    def checkout(self, request):
+        """
+        Оформить заказ из корзины.
+
+        Args:
+            request: HTTP-запрос с полями customer_name, customer_email,
+                customer_phone, delivery_address
+
+        BL: корзина не пуста, адрес валиден, сумма в пределах 500–100 000 ₽,
+        каждого товара достаточно на складе. На каждую позицию создаётся
+        отдельный заказ; склад списывается, корзина очищается.
+        """
+        cart = self._get_cart(request.user)
+        items = list(cart.items.select_related("product"))
+        if not items:
+            return Response({"error": "Корзина пуста"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Валидация адреса доставки
+        try:
+            address = validate_delivery_address(request.data.get("delivery_address", ""))
+        except serializers.ValidationError as exc:
+            return Response({"delivery_address": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Валидация наличия на складе и суммы заказа
+        total = cart.total_price
+        try:
+            validate_order_amount(total)
+        except serializers.ValidationError as exc:
+            return Response({"amount": exc.detail}, status=status.HTTP_400_BAD_REQUEST)
+        for item in items:
+            if item.quantity > item.product.stock_quantity:
+                return Response(
+                    {"error": f"«{item.product.name}»: на складе только {item.product.stock_quantity} шт."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        customer_name = request.data.get("customer_name", "").strip()
+        customer_email = request.data.get("customer_email", "").strip()
+        customer_phone = request.data.get("customer_phone", "").strip()
+        if not (customer_name and customer_email and customer_phone):
+            return Response(
+                {"error": "Укажите имя, email и телефон покупателя"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created_orders = []
+        for item in items:
+            order = Order.objects.create(
+                user=request.user,
+                product=item.product,
+                customer_name=customer_name,
+                customer_email=customer_email,
+                customer_phone=customer_phone,
+                quantity=item.quantity,
+                total_price=item.subtotal,
+                delivery_address=address,
+            )
+            product = item.product
+            product.stock_quantity -= item.quantity
+            if product.stock_quantity <= 0:
+                product.is_available = False
+            product.save()
+            created_orders.append(order)
+
+        cart.items.all().delete()
+        send_order_confirmation(customer_name, customer_email, created_orders, total)
+        return Response(
+            {
+                "status": "success",
+                "message": f"Оформлено заказов: {len(created_orders)} на сумму {total} ₽",
+                "order_ids": [o.id for o in created_orders],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class FavoriteViewSet(viewsets.ModelViewSet):
+    """API избранного: список, добавление, удаление, переключение."""
+
+    serializer_class = FavoriteSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Только избранное текущего пользователя."""
+        return Favorite.objects.filter(user=self.request.user).select_related(
+            "product", "product__category"
+        )
+
+    def perform_create(self, serializer) -> None:
+        """Привязывает запись избранного к текущему пользователю."""
+        serializer.save(user=self.request.user)
+
+    @action(methods=["POST"], detail=False)
+    def toggle(self, request):
+        """
+        Переключить товар в избранном.
+
+        Args:
+            request: HTTP-запрос с полем product (id)
+
+        Если товара нет в избранном — добавляет, иначе удаляет.
+        """
+        product = get_object_or_404(Product, pk=request.data.get("product"))
+        favorite = Favorite.objects.filter(user=request.user, product=product).first()
+        if favorite:
+            favorite.delete()
+            return Response({"status": "removed", "is_favorite": False, "product": product.id})
+        Favorite.objects.create(user=request.user, product=product)
+        return Response(
+            {"status": "added", "is_favorite": True, "product": product.id},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Traditional web views
 # ---------------------------------------------------------------------------
 
@@ -662,12 +896,20 @@ def product_list(request):
     products = products.order_by(sort_by)
 
     categories = Category.objects.filter(is_active=True)
+
+    favorite_ids = []
+    if request.user.is_authenticated:
+        favorite_ids = list(
+            Favorite.objects.filter(user=request.user).values_list("product_id", flat=True)
+        )
+
     return render(request, "shop/product_list.html", {
         "products": products,
         "categories": categories,
         "current_category": category_id,
         "search_query": search or "",
         "on_sale": request.GET.get("on_sale"),
+        "favorite_ids": favorite_ids,
     })
 
 
@@ -679,11 +921,19 @@ def product_detail(request, pk):
     similar_products = Product.objects.filter(
         category=product.category, is_available=True
     ).exclude(pk=product.pk)[:4]
+
+    is_favorite = False
+    if request.user.is_authenticated:
+        is_favorite = Favorite.objects.filter(
+            user=request.user, product=product
+        ).exists()
+
     return render(request, "shop/product_detail.html", {
         "product": product,
         "reviews": reviews,
         "suppliers": suppliers,
         "similar_products": similar_products,
+        "is_favorite": is_favorite,
     })
 
 
@@ -751,8 +1001,7 @@ def web_register_view(request):
         elif User.objects.filter(username=username).exists():
             error = "Пользователь с таким именем уже существует"
         else:
-            from django.contrib.auth.models import User as AuthUser
-            user = AuthUser.objects.create_user(username=username, email=email, password=password)
+            user = User.objects.create_user(username=username, email=email, password=password)
             login(request, user)
             return redirect("product_list")
     return render(request, "shop/register.html", {"error": error})
@@ -762,3 +1011,168 @@ def web_logout_view(request):
     """Выход из аккаунта."""
     logout(request)
     return redirect("product_list")
+
+
+# ---------------------------------------------------------------------------
+# Cart & Favorites web views
+# ---------------------------------------------------------------------------
+
+def cart_view(request):
+    """Страница корзины текущего пользователя."""
+    if not request.user.is_authenticated:
+        return redirect(f"/login/?next={request.path}")
+    cart, _ = Cart.objects.get_or_create(user=request.user)
+    items = cart.items.select_related("product", "product__category")
+    return render(request, "shop/cart.html", {"cart": cart, "items": items})
+
+
+def cart_add(request, product_id):
+    """Добавить товар в корзину (веб-форма)."""
+    from django.contrib import messages
+
+    if not request.user.is_authenticated:
+        return redirect(f"/login/?next=/product/{product_id}/")
+    if request.method != "POST":
+        return redirect("product_detail", pk=product_id)
+
+    product = get_object_or_404(Product, pk=product_id)
+    cart, _ = Cart.objects.get_or_create(user=request.user)
+    try:
+        quantity = max(1, int(request.POST.get("quantity", 1)))
+    except (TypeError, ValueError):
+        quantity = 1
+
+    item, created = CartItem.objects.get_or_create(cart=cart, product=product)
+    new_quantity = quantity if created else item.quantity + quantity
+    if new_quantity > product.stock_quantity:
+        if created:
+            item.delete()
+        messages.error(request, f"Недостаточно на складе. Доступно: {product.stock_quantity} шт.")
+    else:
+        item.quantity = new_quantity
+        item.save()
+        messages.success(request, f"«{product.name}» добавлен в корзину")
+    next_url = request.POST.get("next")
+    return redirect(next_url) if next_url else redirect("cart")
+
+
+def cart_update(request):
+    """Изменить количество товара в корзине (веб-форма)."""
+    if not request.user.is_authenticated:
+        return redirect("login")
+    if request.method == "POST":
+        cart, _ = Cart.objects.get_or_create(user=request.user)
+        item = CartItem.objects.filter(
+            cart=cart, product_id=request.POST.get("product_id")
+        ).first()
+        if item:
+            try:
+                quantity = int(request.POST.get("quantity", item.quantity))
+            except (TypeError, ValueError):
+                quantity = item.quantity
+            if quantity <= 0:
+                item.delete()
+            elif quantity <= item.product.stock_quantity:
+                item.quantity = quantity
+                item.save()
+    return redirect("cart")
+
+
+def cart_remove(request, product_id):
+    """Удалить товар из корзины (веб-форма)."""
+    if not request.user.is_authenticated:
+        return redirect("login")
+    if request.method == "POST":
+        cart, _ = Cart.objects.get_or_create(user=request.user)
+        CartItem.objects.filter(cart=cart, product_id=product_id).delete()
+    return redirect("cart")
+
+
+def cart_checkout(request):
+    """Оформление заказа из корзины (веб-форма)."""
+    from django.contrib import messages
+
+    if not request.user.is_authenticated:
+        return redirect("login")
+    cart, _ = Cart.objects.get_or_create(user=request.user)
+    items = list(cart.items.select_related("product"))
+
+    if request.method != "POST":
+        return render(request, "shop/checkout.html", {"cart": cart, "items": items})
+
+    if not items:
+        messages.error(request, "Корзина пуста")
+        return redirect("cart")
+
+    # Валидация адреса
+    try:
+        address = validate_delivery_address(request.POST.get("delivery_address", ""))
+    except serializers.ValidationError as exc:
+        messages.error(request, "; ".join(str(e) for e in exc.detail))
+        return render(request, "shop/checkout.html", {"cart": cart, "items": items})
+
+    # Валидация суммы заказа
+    total = cart.total_price
+    try:
+        validate_order_amount(total)
+    except serializers.ValidationError as exc:
+        messages.error(request, "; ".join(str(e) for e in exc.detail))
+        return render(request, "shop/checkout.html", {"cart": cart, "items": items})
+
+    # Валидация наличия на складе
+    for item in items:
+        if item.quantity > item.product.stock_quantity:
+            messages.error(request, f"«{item.product.name}»: на складе только {item.product.stock_quantity} шт.")
+            return redirect("cart")
+
+    customer_name = request.POST.get("customer_name", "").strip()
+    customer_email = request.POST.get("customer_email", "").strip()
+    customer_phone = request.POST.get("customer_phone", "").strip()
+    if not (customer_name and customer_email and customer_phone):
+        messages.error(request, "Заполните имя, email и телефон")
+        return render(request, "shop/checkout.html", {"cart": cart, "items": items})
+
+    created_orders = []
+    for item in items:
+        order = Order.objects.create(
+            user=request.user, product=item.product,
+            customer_name=customer_name, customer_email=customer_email,
+            customer_phone=customer_phone, quantity=item.quantity,
+            total_price=item.subtotal, delivery_address=address,
+        )
+        product = item.product
+        product.stock_quantity -= item.quantity
+        if product.stock_quantity <= 0:
+            product.is_available = False
+        product.save()
+        created_orders.append(order)
+
+    cart.items.all().delete()
+    send_order_confirmation(customer_name, customer_email, created_orders, total)
+    messages.success(request, f"Заказ оформлен! Создано заказов: {len(created_orders)} на сумму {total} ₽")
+    return redirect("product_list")
+
+
+def favorites_view(request):
+    """Страница «Избранное» текущего пользователя."""
+    if not request.user.is_authenticated:
+        return redirect(f"/login/?next={request.path}")
+    favorites = Favorite.objects.filter(user=request.user).select_related(
+        "product", "product__category"
+    )
+    products = [f.product for f in favorites]
+    return render(request, "shop/favorites.html", {"products": products})
+
+
+def favorite_toggle(request, product_id):
+    """Переключить товар в избранном (веб-форма)."""
+    if not request.user.is_authenticated:
+        return redirect(f"/login/?next=/product/{product_id}/")
+    if request.method == "POST":
+        product = get_object_or_404(Product, pk=product_id)
+        favorite = Favorite.objects.filter(user=request.user, product=product).first()
+        if favorite:
+            favorite.delete()
+        else:
+            Favorite.objects.create(user=request.user, product=product)
+    return redirect(request.POST.get("next", "product_list"))

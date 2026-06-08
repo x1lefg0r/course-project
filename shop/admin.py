@@ -5,7 +5,9 @@ from simple_history.admin import SimpleHistoryAdmin
 from import_export.admin import ImportExportModelAdmin
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
-from .models import Category, Product, Order, Supplier, Review, UserProfile
+from .models import (
+    Category, Product, Order, Supplier, Review, UserProfile, Cart, CartItem, Favorite,
+)
 
 
 class CategoryResource(resources.ModelResource):
@@ -644,3 +646,41 @@ class UserProfileAdmin(admin.ModelAdmin):
     @admin.display(description="Дата регистрации", ordering="created_at")
     def created_at_short(self, obj):
         return obj.created_at.strftime("%d.%m.%Y")
+
+
+class CartItemInline(admin.TabularInline):
+    """Позиции корзины внутри корзины."""
+
+    model = CartItem
+    extra = 0
+    fields = ["product", "quantity", "added_at"]
+    readonly_fields = ["added_at"]
+    show_change_link = True
+
+
+@admin.register(Cart)
+class CartAdmin(admin.ModelAdmin):
+    """Админка для корзин пользователей."""
+
+    list_display = ["id", "user", "items_count", "total_price_display", "updated_at"]
+    search_fields = ["user__username", "user__email"]
+    readonly_fields = ["created_at", "updated_at"]
+    inlines = [CartItemInline]
+
+    @admin.display(description="Позиций")
+    def items_count(self, obj):
+        return obj.items.count()
+
+    @admin.display(description="Сумма")
+    def total_price_display(self, obj):
+        return format_html("<strong>{} ₽</strong>", obj.total_price)
+
+
+@admin.register(Favorite)
+class FavoriteAdmin(admin.ModelAdmin):
+    """Админка для избранного."""
+
+    list_display = ["id", "user", "product", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = ["user__username", "product__name"]
+    readonly_fields = ["created_at"]

@@ -190,6 +190,8 @@
           <a href="{% url 'product_list' %}">Каталог</a>
           <a href="{% url 'product_list' %}?on_sale=true">🔥 Акции</a>
           {% if user.is_authenticated %}
+            <a href="{% url 'favorites' %}">❤️ Избранное</a>
+            <a href="{% url 'cart' %}">🛒 Корзина</a>
             {% if user.profile.role == 'admin' or user.profile.role == 'manager' %}
               <a href="{% url 'product_add' %}">+ Добавить товар</a>
               <a href="/admin/">Админка</a>

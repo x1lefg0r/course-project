@@ -128,6 +128,28 @@
   .similar-card .s-name { font-weight: 700; font-size: 0.9rem; margin: 8px 0 4px; color: var(--text); }
   .similar-card .s-price { color: var(--primary); font-weight: 800; }
 
+  /* Detail purchase actions */
+  .detail-actions { display: flex; gap: 12px; align-items: stretch; margin-bottom: 20px; flex-wrap: wrap; }
+  .qty-input { width: 80px; padding: 11px 12px; border: 2px solid var(--border); border-radius: 10px; font-size: 1rem; text-align: center; outline: none; }
+  .qty-input:focus { border-color: var(--primary); }
+  .add-cart-btn {
+    flex: 1; min-width: 180px; padding: 12px 24px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white; border: none; border-radius: 10px;
+    font-size: 1rem; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .add-cart-btn:hover:not(:disabled) { opacity: 0.9; }
+  .add-cart-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .fav-toggle-btn {
+    padding: 12px 20px; border: 2px solid var(--border); background: white;
+    border-radius: 10px; cursor: pointer; font-size: 1rem; font-weight: 600;
+    color: var(--text); display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s;
+  }
+  .fav-toggle-btn:hover { border-color: var(--danger); background: #fff5f5; }
+  .fav-toggle-btn.active { border-color: var(--danger); background: #fff5f5; color: #c53030; }
+  .login-hint { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; }
+
   @media (max-width: 768px) {
     .product-detail { grid-template-columns: 1fr; }
     .product-info { padding: 20px; }
@@ -193,6 +215,28 @@
         <span class="stock-ok">✓ В наличии — {{ product.stock_quantity }} шт.</span>
       {% endif %}
     </div>
+
+    {% if user.is_authenticated %}
+      <div class="detail-actions">
+        <form method="POST" action="{% url 'cart_add' product.id %}" style="display:flex;gap:12px;flex:1;">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'cart' %}">
+          <input type="number" name="quantity" value="1" min="1" max="{{ product.stock_quantity }}" class="qty-input" {% if product.stock_quantity == 0 %}disabled{% endif %}>
+          <button type="submit" class="add-cart-btn" {% if product.stock_quantity == 0 %}disabled{% endif %}>
+            🛒 В корзину
+          </button>
+        </form>
+        <form method="POST" action="{% url 'favorite_toggle' product.id %}" style="margin:0;">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'product_detail' product.id %}">
+          <button type="submit" class="fav-toggle-btn {% if is_favorite %}active{% endif %}">
+            {% if is_favorite %}❤️ В избранном{% else %}🤍 В избранное{% endif %}
+          </button>
+        </form>
+      </div>
+    {% else %}
+      <p class="login-hint">🔐 <a href="{% url 'login' %}">Войдите</a>, чтобы добавить товар в корзину или избранное</p>
+    {% endif %}
 
     {% if product.description %}
       <p class="desc-text">{{ product.description }}</p>
